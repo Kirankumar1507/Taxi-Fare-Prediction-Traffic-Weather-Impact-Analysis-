@@ -1,0 +1,48 @@
+# AWS CodeBuild spec — alternative to GitHub Actions for AWS-native CI/CD
+# ======================================================================
+# Trigger: CodePipeline connected to the GitHub repo's main branch.
+#
+# Required CodeBuild environment variables (set in the project or pipeline):
+#   AWS_ACCOUNT_ID    — <REPLACE> with your 12-digit AWS account ID
+#   ECR_REPO_NAME     — taxi-fare-api
+#   AWS_DEFAULT_REGION — ap-southeast-1
+#   SAGEMAKER_ROLE    — arn:aws:iam::<REPLACE>:role/SageMakerExecRole
+#   MODEL_S3_URI      — s3://<REPLACE>/models/taxi-fare/model.tar.gz
+
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.9
+    commands:
+      - echo "Installing dependencies..."
+      - pip install -r requirements.txt
+      - pip install -r requirements-serve.txt
+
+  pre_build:
+    commands:
+      - echo "Running tests..."
+      - python -m pytest tests/ -v --tb=short
+      - echo "Logging in to ECR..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+
+  build:
+    commands:
+      - echo "Building Docker image..."
+      - IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPO_NAME
+      - docker build -t $IMAGE_URI:latest -f deploy/Dockerfile .
+      - docker tag $IMAGE_URI:latest $IMAGE_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+
+  post_build:
+    commands:
+      - echo "Pushing to ECR..."
+      - docker push $IMAGE_URI:latest
+      - docker push $IMAGE_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo "Deploying SageMaker endpoint..."
+      - ECR_IMAGE_URI=$IMAGE_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION python deploy/sagemaker/deploy_endpoint.py
+
+artifacts:
+  files:
+    - deploy/**/*
+    - models/**/*

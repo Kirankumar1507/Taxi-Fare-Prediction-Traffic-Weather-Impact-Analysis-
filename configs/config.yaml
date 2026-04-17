@@ -1,0 +1,124 @@
+# Taxi Fare Prediction — Configuration
+# ======================================
+
+paths:
+  raw_data: "data/raw/taxi_trip_pricing.csv"
+  processed_data: "data/processed/taxi_processed.csv"
+  train_split: "data/splits/train.csv"
+  val_split: "data/splits/val.csv"
+  test_split: "data/splits/test.csv"
+  models_dir: "models"
+  reports_dir: "reports"
+
+random_seed: 42
+
+# --- Features ---
+features:
+  target: "Trip_Price"
+
+  raw_numeric:
+    - Trip_Distance_km
+    - Passenger_Count
+    - Base_Fare
+    - Per_Km_Rate
+    - Per_Minute_Rate
+    - Trip_Duration_Minutes
+
+  raw_categorical:
+    - Time_of_Day
+    - Day_of_Week
+    - Traffic_Conditions
+    - Weather
+
+  engineered:
+    - distance_cost        # Trip_Distance_km * Per_Km_Rate
+    - duration_cost        # Trip_Duration_Minutes * Per_Minute_Rate
+    - metered_fare         # Base_Fare + distance_cost + duration_cost
+    - avg_speed_kmh        # Trip_Distance_km / (Trip_Duration_Minutes / 60)
+    - traffic_distance     # Traffic_encoded * Trip_Distance_km
+    - weather_duration     # Weather_encoded * Trip_Duration_Minutes
+    - is_peak_hour         # Morning or Evening = 1
+    - is_weekend           # Weekend = 1
+    - peak_traffic         # is_peak_hour * Traffic_encoded
+
+  # Final feature list used for modeling (set after feature engineering)
+  # Excludes target and raw cols that are fully captured by engineered features
+  model_features:
+    - Trip_Distance_km
+    - Passenger_Count
+    - Base_Fare
+    - Per_Km_Rate
+    - Per_Minute_Rate
+    - Trip_Duration_Minutes
+    - Time_of_Day_encoded
+    - Day_of_Week_encoded
+    - Traffic_encoded
+    - Weather_encoded
+    - distance_cost
+    - duration_cost
+    - metered_fare
+    - avg_speed_kmh
+    - traffic_distance
+    - weather_duration
+    - is_peak_hour
+    - is_weekend
+    - peak_traffic
+
+# --- Encoding ---
+encoding:
+  Traffic_Conditions:
+    Low: 0
+    Medium: 1
+    High: 2
+  Weather:
+    Clear: 0
+    Rain: 1
+    Snow: 2
+  Time_of_Day:
+    Morning: 0
+    Afternoon: 1
+    Evening: 2
+    Night: 3
+  Day_of_Week:
+    Weekday: 0
+    Weekend: 1
+
+# --- Imputation ---
+imputation:
+  numeric_strategy: "median"
+  categorical_strategy: "mode"
+
+# --- Split ---
+split:
+  test_pct: 0.20
+  val_pct: 0.20  # of remaining after test split (i.e., 20% of 80% = 16% overall)
+
+# --- Models ---
+models:
+  ridge:
+    alpha: 1.0
+
+  xgboost:
+    max_depth: 3
+    n_estimators: 300
+    learning_rate: 0.03
+    subsample: 0.7
+    colsample_bytree: 0.7
+    reg_alpha: 1.0
+    reg_lambda: 5.0
+    min_child_weight: 5
+    early_stopping_rounds: 50
+
+  catboost:
+    depth: 3
+    iterations: 500
+    learning_rate: 0.03
+    l2_leaf_reg: 12
+    min_data_in_leaf: 10
+    early_stopping_rounds: 50
+    verbose: 0
+
+# --- CV ---
+cv:
+  n_splits: 10
+  n_repeats: 3
